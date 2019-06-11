@@ -10,10 +10,10 @@ G = 1.0             #gravitational constant
 TIME_STEP = 0.001   #time between each position update
 AU = 1.0            #distance unit (AU because "astronomical unit")
 MASS_SCALE = 1.0    #mass scale if needed
-NUM_STEPS = 10000   #number of time steps used
+NUM_STEPS = 20000   #number of time steps used
 TOLERANCE = .05     #minimum distance at which time step adjustment will occur
-CA_STEPS = 10       #close approach step reduction
-A = 0.1             #softening distance
+CA_STEPS = 100       #close approach step reduction
+A = 0             #softening distance
 
 # Set up figure, x and y axis limits
 fig, ax = plt.subplots()
@@ -104,25 +104,6 @@ def verlet_vel(vel3, acc3, old_acc3, vel4, acc4, old_acc4, vel5, acc5, old_acc5)
     vel5[0] += 0.5 * (acc5[0] + old_acc5[0]) * TIME_STEP
     vel5[1] += 0.5 * (acc5[1] + old_acc5[1]) * TIME_STEP
 
-# Calculate acceleration of two masses for close approaches
-#def close_acc(m1, m1_pos, m1_acc, m2, m2_pos, m2_acc, m3, m3_pos, m3_acc):
-#    m1_acc[0] = -((m1_pos[0] - m2_pos[0]) * G * m2) / \
-#    math.sqrt(((m1_pos[0] - m2_pos[0]) **2) + ((m1_pos[1] - m2_pos[1]) **2))**3
-#    m1_acc[1] = -((m1_pos[1] - m2_pos[1]) * G * m2) / \
-#    math.sqrt(((m1_pos[0] - m2_pos[0]) **2) + ((m1_pos[1] - m2_pos[1]) **2))**3
-#    m1_acc[0] += -((m1_pos[0] - m3_pos[0]) * G * m3) / \
-#    math.sqrt(((m1_pos[0] - m3_pos[0]) **2) + ((m1_pos[1] - m3_pos[1]) **2))**3
-#    m1_acc[1] += -((m1_pos[1] - m3_pos[1]) * G * m3) / \
-#    math.sqrt(((m1_pos[0] - m3_pos[0]) **2) + ((m1_pos[1] - m3_pos[1]) **2))**3
-#    
-#    m2_acc[0] = -((m2_pos[0] - m1_pos[0]) * G * m1) / \
-#    math.sqrt(((m2_pos[0] - m1_pos[0]) **2) + ((m2_pos[1] - m1_pos[1]) **2))**3
-#    m2_acc[1] = -((m2_pos[1] - m1_pos[1]) * G * m1) / \
-#    math.sqrt(((m2_pos[0] - m1_pos[0]) **2) + ((m2_pos[1] - m1_pos[1]) **2))**3
-#    m2_acc[0] += -((m2_pos[0] - m3_pos[0]) * G * m3) / \
-#    math.sqrt(((m2_pos[0] - m3_pos[0]) **2) + ((m2_pos[1] - m3_pos[1]) **2))**3
-#    m2_acc[1] += -((m2_pos[1] - m3_pos[1]) * G * m3) / \
-#    math.sqrt(((m2_pos[0] - m3_pos[0]) **2) + ((m2_pos[1] - m3_pos[1]) **2))**3
     
 # Used as init_func for FuncAnimation
 def init():
@@ -132,9 +113,9 @@ def init():
 
 # Animation function that FuncAnimation will call
 def animate(i):
-    lines[0].set_data(pos_m3[0][:i], pos_m3[1][:i])
-    lines[1].set_data(pos_m4[0][:i], pos_m4[1][:i])
-    lines[2].set_data(pos_m5[0][:i], pos_m5[1][:i])
+    lines[0].set_data(pos_m3[0][:i*2], pos_m3[1][:i*2])
+    lines[1].set_data(pos_m4[0][:i*2], pos_m4[1][:i*2])
+    lines[2].set_data(pos_m5[0][:i*2], pos_m5[1][:i*2])
     return lines
     
 
@@ -157,15 +138,26 @@ vel5 = [0, 0]
 acc5 = [0, 0]
 old_acc5 = [0, 0]
 
+# Initial acceleration calculation
 calculate_acc(mass3, pos3, acc3, mass4, pos4, acc4, mass5, pos5, acc5)
 for i in range(NUM_STEPS):
-    if (math.sqrt((pos3[0] - pos4[0])**2) + (pos3[1] - pos4[1])**2 < TOLERANCE) \
+    # This condition checks distances to determine if smaller step sizes
+    # are needed to help prevent the masses from flying off incorrectly
+    while (math.sqrt((pos3[0] - pos4[0])**2) + (pos3[1] - pos4[1])**2 < TOLERANCE) \
     or (math.sqrt((pos3[0] - pos5[0])**2) + (pos3[1] - pos5[1])**2 < TOLERANCE) \
     or (math.sqrt((pos4[0] - pos5[0])**2) + (pos4[1] - pos5[1])**2 < TOLERANCE):
+        # The process is the same as it usually would be, but with a reduced
+        # step size for more accuracy and without appending all the positions
+        # from this for loop
+        
+        # Reduce the time step
         TIME_STEP /= CA_STEPS
         for j in range(CA_STEPS):
+            # Update positions of the masses
             verlet_pos(pos3, vel3, acc3, pos4, vel4, acc4, pos5, vel5, acc5)
             
+            # Set the values of old acceleration to current values before
+            # updating
             old_acc3[0] = acc3[0]
             old_acc3[1] = acc3[1]
             old_acc4[0] = acc4[0]
@@ -173,10 +165,16 @@ for i in range(NUM_STEPS):
             old_acc5[0] = acc5[0]
             old_acc5[1] = acc5[1]
             
+            # Update the acceleration and calculate new velocities
             calculate_acc(mass3, pos3, acc3, mass4, pos4, acc4, mass5, pos5, acc5)
             verlet_vel(vel3, acc3, old_acc3, vel4, acc4, old_acc4, vel5, acc5, old_acc5)
+        # Restore time step to original value
         TIME_STEP *= CA_STEPS
+        # Increase the total number of points for animation
         NUM_STEPS += 1
+        # The positions are intentionally added outside the for loop because
+        # only the last position should be added to keep the pace of the
+        # animation consistent
         pos_m3[0].append(pos3[0])
         pos_m3[1].append(pos3[1])
         pos_m4[0].append(pos4[0])
@@ -209,7 +207,7 @@ for i in range(NUM_STEPS):
     verlet_vel(vel3, acc3, old_acc3, vel4, acc4, old_acc4, vel5, acc5, old_acc5)
 
 # Create the animation    
-anim = FuncAnimation(fig, animate, init_func=init, frames=NUM_STEPS,
+anim = FuncAnimation(fig, animate, init_func=init, frames=NUM_STEPS // 2,
                      blit=True, interval=1)
 
 # Use these for regular plots instead of animation
@@ -217,21 +215,3 @@ anim = FuncAnimation(fig, animate, init_func=init, frames=NUM_STEPS,
 #ax.plot(pos_m4[0], pos_m4[1], c='red')
 #ax.plot(pos_m5[0], pos_m5[1], c='blue')
 #plt.show()
-
-
-
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
